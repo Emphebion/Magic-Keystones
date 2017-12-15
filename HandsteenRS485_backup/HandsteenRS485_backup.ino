@@ -74,7 +74,7 @@ bool rfidTagFound = false;
 bool skipOne = true;
 int rfid_count = 0;
 
-unsigned long skillTimeout = 3000;  // Time before a skill activates (300000 ms = 300 s = 5 min)
+unsigned long skillTimeout = 300000;  // Time before a skill activates (300000 ms = 300 s = 5 min)
 unsigned long toegangTimeout = 2500;  // Time before access is revoked (2500 ms = 2.5 s)
 unsigned long rfidReadTimeout = 1000; // Time before another Tag can be read (200 ms)
 unsigned long skillLEDTimeout = 250;  // Time step before a keystone LED changes one step (250 ms = 0.25 s)
@@ -113,17 +113,17 @@ void loop(){
   
   if(rs485.available()){
     byte rs485Received = receiveMessage(rs485Buf, 6, 6);
-//    Serial.print("[");
-//    Serial.print(rs485Buf[0]);
-//    Serial.print(",");
-//    Serial.print(rs485Buf[1]);
-//    Serial.print(",");
-//    Serial.print(rs485Buf[2]);
-//    Serial.print(",");
-//    Serial.print(rs485Buf[3]);
-//    Serial.print(",");
-//    Serial.print(rs485Buf[4]);
-//    Serial.println("]");
+    Serial.print("[");
+    Serial.print(rs485Buf[0]);
+    Serial.print(",");
+    Serial.print(rs485Buf[1]);
+    Serial.print(",");
+    Serial.print(rs485Buf[2]);
+    Serial.print(",");
+    Serial.print(rs485Buf[3]);
+    Serial.print(",");
+    Serial.print(rs485Buf[4]);
+    Serial.println("]");
     if (rs485Received == 5){
       if (rs485Buf[0] == deviceNumber){
         executeCommand(rs485Buf);
@@ -131,26 +131,43 @@ void loop(){
     }
   }
   
-  if(rdyRFID){
-    skillTimer = timer;
-    if (!slotKraken){
-      rs485.end();
-      RFID.begin(9600);
-      if (!rfidTagFound){
-        rfidTagFound = readRFIDTag(tag_buf);
-      }
-      RFID.end();
-      rs485.begin(57600);
-    }
-    rdyRFID = false;
-  }
-  else{
+  if(slotKraken){
     if((timer - skillTimer) >= skillTimeout){
-      Serial.println("skillTimer Timeout reached");
-      skillTimer = timer;
+//      setKeystoneLEDs(200,200,200);
+//      delay(3000);
+//      setKeystoneLEDs(0,200,0);
       slotKraken = false;
       rfidTagFound = false;
+      skillTimer = timer;
     }
+  }
+  
+  if(rdyRFID and !slotKraken){
+    rs485.end();
+    RFID.begin(9600);
+    delay(1);
+    if (!rfidTagFound){
+      rfidTagFound = readRFIDTag(tag_buf);
+    }
+    RFID.end();
+    rs485.begin(57600);
+    toegangTimer = timer;
+  }
+  
+  if((timer - rfidReadTimer) >= rfidReadTimeout){
+    rdyRFID = false;
+  }
+  if((timer - toegangTimer) >= toegangTimeout){
+    skillLEDTimeout = 250;
+    slotOpen = false;
+    slotKraken = false;
+    rfidTagFound = false;
+
+    blauw1Val = 150;
+    setKeystoneLEDs(0,0,blauw1Val);
+    skillTimer = timer;
+//    toegangTimer = timer;
+//    rfidReadTimer = timer;
   }
 }
 
@@ -227,6 +244,7 @@ byte executeCommand(byte* command) {
     Serial.println("Command 1 executed");
   }
   else if (command[1] == 12) {
+    accessGranted();
     setKeystoneLEDs(command[2],command[3],command[4]);
     constructMessage(message, 0, 1, 0, 0, 0);
     sendResponce(message);
@@ -234,6 +252,7 @@ byte executeCommand(byte* command) {
     Serial.println("Command 2 executed");
   }
   else if (command[1] == 13) {
+    accessDenied();
     setKeystoneLEDs(command[2],command[3],command[4]);
     constructMessage(message, 0, 1, 0, 0, 0);
     sendResponce(message);
@@ -241,10 +260,10 @@ byte executeCommand(byte* command) {
     Serial.println("Command 3 executed");
   }
   else if (command[1] == 14) {
+    forcingAccess();
     setKeystoneLEDs(command[2],command[3],command[4]);
     constructMessage(message, 0, 1, 0, 0, 0);
     sendResponce(message);
-    slotKraken = true;
     Serial.println("Command 4 executed");
   }
   else if (command[1] == 15) {
@@ -253,6 +272,43 @@ byte executeCommand(byte* command) {
     sendResponce(message);
     rfidTagFound = false;
     Serial.println("Empty command executed");
+  }
+}
+
+//***************************************************************************//
+// Access Granted                                                            //
+//***************************************************************************//
+void accessGranted(void){
+  Serial.println("Key confirmed");
+  toegangTimer = timer;
+  setKeystoneLEDs(0,255,0);
+}
+
+//***************************************************************************//
+// Access Denied                                                             //
+//***************************************************************************//
+void accessDenied(void){
+  Serial.println("Key denied");
+  toegangTimer = timer;
+  setKeystoneLEDs(255,0,0);
+}
+
+//***************************************************************************//
+// Forcing Access                                                            //
+//***************************************************************************//
+void forcingAccess(void){
+  Serial.println("Lockpick confirmed: TODO execute stuff");
+  toegangTimer = timer;
+  Serial.println(rfid_count);
+  if(rdyRFID){
+    rfid_count = 0;
+    slotKraken = true;
+  }
+  else{
+    if(++rfid_count >= 5){
+      slotKraken = false;
+      rfidTagFound = false;
+    }
   }
 }
 
@@ -365,11 +421,11 @@ bool readRFIDTag(byte* data){
   
   // Controleer de checksum
   if ( checksum == data_checksum ){
-    Serial.println("OK");
+    Serial.println(" OK");
     result = true;
   }
   else{
-    Serial.println("CHECKSUM FAILED");
+    Serial.println(" CHECKSUM FAILED");
   }
 
   while(RFID.available()){
@@ -405,7 +461,6 @@ uint8_t rfidGetNext(void)
 void rfidRead(void){
   // Lees alleen een waarde als er niet nog een verwerkt word
   if ( !rdyRFID ){
-    Serial.println("Interrupt");
     rfidReadTimer = millis();
     rdyRFID = true;                            // Zet de rdyRFID flag
   }
