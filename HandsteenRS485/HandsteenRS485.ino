@@ -10,13 +10,13 @@
 // Pin Definitions                                                           //
 //***************************************************************************//
 //RGB Strip 1 (knop): D3(rood), D6(groen), D5(blauw)
-#define rood1PIN 3
-#define groen1PIN 6
-#define blauw1PIN 5
+#define groen1PIN 3
+#define rood1PIN 5
+#define blauw1PIN 6
 
 //RGB strip 2 (basis): D9(rood), D10(groen), D11(blauw)
-#define rood2PIN 9
-#define groen2PIN 10
+#define groen2PIN 9
+#define rood2PIN 10
 #define blauw2PIN 11
 
 //RS485 Serial connection
@@ -35,7 +35,7 @@
 //***************************************************************************//
 // Device dependent values                                                   //
 //***************************************************************************//
-#define deviceNumber 15
+#define deviceNumber 14
 #define Fadespeed 1200
 
 //***************************************************************************//
@@ -216,6 +216,7 @@ byte receiveMessage(byte* data, const byte length, unsigned int timeout){
 // Execute the received command                          //
 //*******************************************************//
 byte executeCommand(byte* command) {
+  //Status
   if (command[1] == 11) {
     if (rfidTagFound){
       constructMessage(message, 0, tag_buf[0], tag_buf[1], tag_buf[2], tag_buf[3]);
@@ -226,6 +227,7 @@ byte executeCommand(byte* command) {
     sendResponce(message);
     Serial.println("Command 1 executed");
   }
+  //Open
   else if (command[1] == 12) {
     setKeystoneLEDs(command[2],command[3],command[4]);
     constructMessage(message, 0, 1, 0, 0, 0);
@@ -233,6 +235,7 @@ byte executeCommand(byte* command) {
     rfidTagFound = false;
     Serial.println("Command 2 executed");
   }
+  //Sluit
   else if (command[1] == 13) {
     setKeystoneLEDs(command[2],command[3],command[4]);
     constructMessage(message, 0, 1, 0, 0, 0);
@@ -240,6 +243,7 @@ byte executeCommand(byte* command) {
     rfidTagFound = false;
     Serial.println("Command 3 executed");
   }
+  //Slot Kraken
   else if (command[1] == 14) {
     setKeystoneLEDs(command[2],command[3],command[4]);
     constructMessage(message, 0, 1, 0, 0, 0);
